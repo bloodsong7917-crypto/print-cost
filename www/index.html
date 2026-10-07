@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Себестоимость 3D-печати</title>
+<meta name="description" content="Калькулятор себестоимости 3D-печати и учёт деталей">
+<meta name="theme-color" content="#0A6C6C">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;padding:0}
+[hidden]{display:none!important}
+/* Layout: рабочий стол печатника — слева ввод параметров, справа «табло» с итогом; разделы переключаются вкладками (на телефоне — панель снизу). */
+:root{
+  --bg:#ECEFF1; --surface:#FFFFFF; --sunken:#E2E7EA; --ink:#15232B; --muted:#586972; --line:#CDD6DB;
+  --accent:#0A6C6C; --accent-ink:#FFFFFF; --accent-soft:#D8ECEB;
+  --time:#C9741C; --extra:#7C8A94; --danger:#B3261E;
+  --display:"Unbounded","Onest",system-ui,sans-serif;
+  --body:"Onest",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10171B; --surface:#192329; --sunken:#0C1215; --ink:#E5ECEF; --muted:#93A3AD; --line:#2C3A43;
+    --accent:#43BDB4; --accent-ink:#06201F; --accent-soft:#173A3A;
+    --time:#E5A152; --extra:#8796A0; --danger:#FF8A80; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10171B; --surface:#192329; --sunken:#0C1215; --ink:#E5ECEF; --muted:#93A3AD; --line:#2C3A43;
+  --accent:#43BDB4; --accent-ink:#06201F; --accent-soft:#173A3A;
+  --time:#E5A152; --extra:#8796A0; --danger:#FF8A80; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:16px;padding-block:20px 96px;display:flex;flex-direction:column;gap:20px}
+header.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}
+h1{font-family:var(--display);font-weight:700;font-size:19px;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.status{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-left:auto}
+.status::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--extra)}
+.status[data-s="ok"]::before{background:var(--accent)}
+.status[data-s="local"]::before{background:var(--time)}
+.status[data-s="err"]::before{background:var(--danger)}
+
+nav.tabs{display:flex;gap:4px;background:var(--sunken);padding:4px;border-radius:var(--r)}
+nav.tabs button{flex:1;border:0;background:transparent;color:var(--muted);font:600 14px var(--body);padding:10px 14px;border-radius:7px;cursor:pointer}
+nav.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
+@media (max-width:719px){
+  nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;border-radius:0;border-top:1px solid var(--line);background:var(--surface);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px))}
+  nav.tabs button{padding:11px 4px;font-size:13px}
+  nav.tabs button[aria-selected="true"]{background:var(--accent-soft);color:var(--accent);box-shadow:none}
+}
+@media (min-width:720px){ .wrap{padding-block:28px 48px} header.top nav.tabs{order:3;flex-basis:100%} }
+
+section.view{display:flex;flex-direction:column;gap:16px}
+h2{font:700 16px var(--body);margin:0}
+.hint{color:var(--muted);font-size:13px;margin:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+
+.calc{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:860px){ .calc{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);align-items:start} }
+
+.fields{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.fields .full{grid-column:1 / -1}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted);min-width:0}
+label.f span.u{font-weight:400}
+input,select,textarea{font:500 15px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 11px;width:100%;min-width:0}
+input.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+textarea{resize:vertical;min-height:88px;line-height:1.45}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+button.btn{font:600 14px var(--body);border-radius:8px;padding:10px 16px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+button.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.btn.small{padding:6px 10px;font-size:13px}
+button.btn.danger{color:var(--danger)}
+button.btn:disabled{opacity:.5;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.row .grow{flex:1 1 180px;min-width:0}
+
+/* табло */
+.readout{background:var(--sunken)}
+.readout .cap{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.big{font-family:var(--display);font-weight:700;font-size:clamp(30px,8vw,44px);line-height:1.05;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--line)}
+.bar i{display:block;height:100%}
+.bar .m{background:var(--accent)} .bar .t{background:var(--time)} .bar .x{background:var(--extra)}
+dl.split{margin:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;font-size:14px}
+dl.split dt{display:flex;align-items:center;gap:8px;color:var(--ink);min-width:0}
+dl.split dt::before{content:"";width:10px;height:10px;border-radius:3px;background:var(--sw,transparent);flex:none}
+dl.split dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+dl.split .sub{color:var(--muted);font-size:12.5px}
+hr{border:0;border-top:1px solid var(--line);margin:0;width:100%}
+.example{font-size:12.5px;color:var(--muted);border:1px dashed var(--line);border-radius:8px;padding:8px 10px}
+
+/* списки */
+.list{display:flex;flex-direction:column}
+.item{display:grid;gap:4px 14px;padding:12px 0;border-top:1px solid var(--line);align-items:center}
+.item:first-child{border-top:0}
+.part{grid-template-columns:110px minmax(0,1fr) 100px 90px 120px auto}
+.part.head{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding-block:0 8px}
+.part .sku{font-family:var(--mono);font-size:13px;overflow-wrap:anywhere}
+.part .nm{font-weight:600;overflow-wrap:anywhere}
+.part .nm small{display:block;font-weight:400;color:var(--muted);font-size:12.5px}
+.part .mat{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.part .cost{font-weight:700}
+.acts{display:flex;gap:6px;justify-content:flex-end}
+@media (max-width:719px){
+  .part.head{display:none}
+  .part{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"nm cost" "sku w" "mat acts"}
+  .part .sku{grid-area:sku}.part .nm{grid-area:nm}.part .mat{grid-area:mat}.part .w{grid-area:w;color:var(--muted);font-size:13px}.part .cost{grid-area:cost}.part .acts{grid-area:acts}
+}
+.mrow{grid-template-columns:minmax(0,1fr) auto auto}
+.mrow .nm{font-weight:600;overflow-wrap:anywhere}
+.note{grid-template-columns:minmax(0,1fr) auto}
+.note p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.note time{font-size:12.5px;color:var(--muted)}
+.empty{color:var(--muted);padding:18px 0;text-align:left;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.totals{font-size:13px;color:var(--muted)}
+
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);padding:20px;width:min(480px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+dialog::backdrop{background:rgb(0 0 0 / .45)}
+dialog form{display:flex;flex-direction:column;gap:14px}
+.msg{font-size:13px;color:var(--danger);min-height:1.2em}
+.ok{color:var(--accent)}
+@media (prefers-reduced-motion:no-preference){ .bar i{transition:width .2s ease} }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header class="top">
+    <h1>Себестоимость 3D-печати</h1>
+    <div class="status" id="status" data-s="ok"></div>
+    <nav class="tabs" role="tablist" aria-label="Разделы">
+      <button role="tab" data-tab="calc" id="tab-calc">Расчёт</button>
+      <button role="tab" data-tab="parts" id="tab-parts">Детали</button>
+      <button role="tab" data-tab="profile" id="tab-profile">Профиль</button>
+      <button role="tab" data-tab="notes" id="tab-notes">Заметки</button>
+    </nav>
+  </header>
+
+  <!-- РАСЧЁТ -->
+  <section class="view" id="view-calc">
+    <div class="calc">
+      <div class="panel">
+        <h2>Параметры печати</h2>
+        <div class="example" id="exampleNote">Это пример расчёта. Подставьте свои значения — итог пересчитается сразу.</div>
+        <div class="fields">
+          <label class="f full">Материал
+            <select id="c_material"></select>
+          </label>
+          <label class="f">Цена пластика <span class="u">₽ за 1 кг</span>
+            <input class="n" id="c_price" inputmode="decimal" value="1500">
+          </label>
+          <label class="f">Вес пластика <span class="u">г на всю печать</span>
+            <input class="n" id="c_weight" inputmode="decimal" value="120">
+          </label>
+          <label class="f">Время печати <span class="u">часы</span>
+            <input class="n" id="c_hours" inputmode="decimal" value="5">
+          </label>
+          <label class="f">&nbsp;<span class="u">минуты</span>
+            <input class="n" id="c_minutes" inputmode="numeric" value="30">
+          </label>
+          <label class="f">Штук за одну печать
+            <input class="n" id="c_qty" inputmode="numeric" value="1">
+          </label>
+          <label class="f">Доп. расходы <span class="u">₽ на 1 шт</span>
+            <input class="n" id="c_extra" inputmode="decimal" value="0">
+          </label>
+        </div>
+        <p class="hint" id="rateHint"></p>
+      </div>
+
+      <div class="panel readout">
+        <div class="cap">Себестоимость 1 шт</div>
+        <div class="big" id="r_total">—</div>
+        <div class="bar" aria-hidden="true"><i class="m" id="b_m"></i><i class="t" id="b_t"></i><i class="x" id="b_x"></i></div>
+        <dl class="split">
+          <dt style="--sw:var(--accent)">Пластик</dt><dd id="r_mat">—</dd>
+          <dt style="--sw:var(--time)">Работа принтера</dt><dd id="r_time">—</dd>
+          <dt style="--sw:var(--extra)">Доп. расходы</dt><dd id="r_extra">—</dd>
+          <dt class="sub">Вес 1 шт</dt><dd class="sub" id="r_w">—</dd>
+          <dt class="sub">Вся печать</dt><dd class="sub" id="r_batch">—</dd>
+        </dl>
+        <hr>
+        <h2>Сохранить в учёт</h2>
+        <div class="fields">
+          <label class="f">Артикул
+            <input id="s_sku" autocomplete="off" placeholder="DET-001">
+          </label>
+          <label class="f">Название модели
+            <input id="s_name" autocomplete="off" placeholder="Кронштейн полки">
+          </label>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="s_save" type="button">Сохранить деталь</button>
+          <span class="msg" id="s_msg" role="status"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ДЕТАЛИ -->
+  <section class="view" id="view-parts" hidden>
+    <div class="panel">
+      <div class="row">
+        <h2 class="grow">Учёт деталей</h2>
+        <button class="btn" id="p_csv" type="button">Экспорт в CSV</button>
+        <button class="btn primary" id="p_add" type="button">Добавить вручную</button>
+      </div>
+      <div class="row">
+        <input class="grow" id="p_search" type="search" placeholder="Поиск по артикулу или названию">
+        <span class="totals" id="p_totals"></span>
+      </div>
+      <div class="list" id="p_list"></div>
+    </div>
+  </section>
+
+  <!-- ПРОФИЛЬ -->
+  <section class="view" id="view-profile" hidden>
+    <div class="panel">
+      <div class="row">
+        <h2 class="grow">Материалы</h2>
+        <button class="btn primary" id="m_add" type="button">Добавить материал</button>
+      </div>
+      <div class="list" id="m_list"></div>
+    </div>
+    <div class="panel">
+      <h2>Стоимость часа работы принтера</h2>
+      <p class="hint">Час печати = электричество (мощность × тариф) + амортизация. Если считать электричество не нужно, поставьте мощность 0 и впишите в амортизацию свою ставку за час.</p>
+      <div class="fields">
+        <label class="f">Средняя мощность принтера <span class="u">Вт</span>
+          <input class="n" id="st_power" inputmode="decimal">
+        </label>
+        <label class="f">Тариф на электричество <span class="u">₽ за кВт·ч</span>
+          <input class="n" id="st_tariff" inputmode="decimal">
+        </label>
+        <label class="f">Амортизация принтера <span class="u">₽ за час</span>
+          <input class="n" id="st_amort" inputmode="decimal">
+        </label>
+        <label class="f">Запас на брак и поддержки <span class="u">% к пластику</span>
+          <input class="n" id="st_waste" inputmode="decimal">
+        </label>
+      </div>
+      <p class="hint" id="st_rate"></p>
+    </div>
+    <div class="panel">
+      <h2>Резервная копия</h2>
+      <p class="hint">Данные хранятся только на этом устройстве. Сохраните копию в файл, чтобы не потерять их или перенести между телефоном и компьютером.</p>
+      <div class="row">
+        <button class="btn" id="bk_export" type="button">Сохранить копию в файл</button>
+        <button class="btn" id="bk_import" type="button">Восстановить из файла</button>
+        <input id="bk_file" type="file" accept="application/json,.json" hidden>
+      </div>
+      <div class="msg" id="bk_msg" role="status"></div>
+    </div>
+  </section>
+
+  <!-- ЗАМЕТКИ -->
+  <section class="view" id="view-notes" hidden>
+    <div class="panel">
+      <h2>Заметки</h2>
+      <label class="f">Новая заметка
+        <textarea id="n_text" placeholder="Например: PETG от нового поставщика печатать на 240 °C"></textarea>
+      </label>
+      <div class="row"><button class="btn primary" id="n_add" type="button">Добавить заметку</button></div>
+      <div class="list" id="n_list"></div>
+    </div>
+  </section>
+</div>
+
+<dialog id="dlg">
+  <form id="dlg_form" method="dialog">
+    <h2 id="dlg_title"></h2>
+    <div class="fields" id="dlg_fields"></div>
+    <div class="msg" id="dlg_msg"></div>
+    <div class="row">
+      <button class="btn primary" type="submit" id="dlg_ok">Сохранить</button>
+      <button class="btn" type="button" id="dlg_cancel">Отмена</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+var KEYS = ["settings","materials","parts","notes"];
+var DEFAULT_SETTINGS = { power:150, tariff:6.5, amort:15, waste:5 };
+var S = { settings:Object.assign({},DEFAULT_SETTINGS), materials:[], parts:[], notes:[] };
+var loaded = false, saveErr = false;
+var LS = "print-cost:";
+
+/* ---------- helpers ---------- */
+function num(v){ var n = parseFloat(String(v == null ? "" : v).replace(/\s/g,"").replace(",", ".")); return isFinite(n) ? n : 0; }
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+var fmt2 = new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2});
+var fmt1 = new Intl.NumberFormat("ru-RU",{maximumFractionDigits:1});
+function rub(n){ return fmt2.format(n) + " ₽"; }
+function grams(n){ return fmt1.format(n) + " г"; }
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function round(n,d){ var k = Math.pow(10,d); return Math.round(n*k)/k; }
+function hourRate(){ var s = S.settings; return num(s.power)/1000*num(s.tariff) + num(s.amort); }
+
+/* чистая функция расчёта */
+function compute(p, settings){
+  var qty = Math.max(1, Math.floor(p.qty) || 1);
+  var hours = p.hours + p.minutes/60;
+  var rate = settings.power/1000*settings.tariff + settings.amort;
+  var matBatch = p.weight/1000*p.price*(1 + settings.waste/100);
+  var timeBatch = hours*rate;
+  var mat = matBatch/qty, time = timeBatch/qty, extra = p.extra;
+  return { qty:qty, hours:hours, rate:rate, mat:mat, time:time, extra:extra,
+           total:mat+time+extra, weightEach:p.weight/qty, batch:matBatch+timeBatch+extra*qty };
+}
+
+/* ---------- хранение (на устройстве) ---------- */
+function lsGet(k){ try{ var r = localStorage.getItem(LS+k); return r ? JSON.parse(r) : null; }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(LS+k, JSON.stringify(v)); return true; }catch(e){ return false; } }
+function body(k){ return k === "settings" ? Object.assign({}, S.settings) : { items:S[k] }; }
+function apply(k, data){
+  if(k === "settings") S.settings = Object.assign({}, DEFAULT_SETTINGS, data || {});
+  else S[k] = (data && Array.isArray(data.items)) ? data.items.slice() : [];
+}
+function setStatus(){
+  var el = $("status");
+  if(saveErr){ el.dataset.s = "err"; el.textContent = "Не удалось сохранить: хранилище недоступно или переполнено"; }
+  else { el.dataset.s = "ok"; el.textContent = "Данные сохранены на этом устройстве"; }
+}
+function save(k){ saveErr = !lsSet(k, body(k)); setStatus(); }
+function start(){
+  KEYS.forEach(function(k){ var d = lsGet(k); if(d) apply(k, d); });
+  loaded = true; renderAll(); setStatus();
+  if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function(){});
+}
+
+/* ---------- вкладки ---------- */
+var TABS = ["calc","parts","profile","notes"];
+function showTab(t){
+  if(TABS.indexOf(t) < 0) t = "calc";
+  TABS.forEach(function(x){
+    $("view-"+x).hidden = x !== t;
+    $("tab-"+x).setAttribute("aria-selected", x === t ? "true" : "false");
+  });
+  try{ localStorage.setItem(LS+"tab", t); }catch(e){}
+}
+document.querySelector("nav.tabs").addEventListener("click", function(e){
+  var b = e.target.closest("button[data-tab]"); if(b) showTab(b.dataset.tab);
+});
+
+/* ---------- расчёт ---------- */
+var CALC_IDS = ["c_price","c_weight","c_hours","c_minutes","c_qty","c_extra"];
+function calcInput(){
+  return { price:num($("c_price").value), weight:num($("c_weight").value), hours:num($("c_hours").value),
+           minutes:num($("c_minutes").value), qty:num($("c_qty").value), extra:num($("c_extra").value) };
+}
+function settingsNum(){ var s = S.settings; return { power:num(s.power), tariff:num(s.tariff), amort:num(s.amort), waste:num(s.waste) }; }
+var last = null;
+function renderCalc(){
+  var r = last = compute(calcInput(), settingsNum());
+  $("r_total").textContent = rub(r.total);
+  $("r_mat").textContent = rub(r.mat);
+  $("r_time").textContent = rub(r.time);
+  $("r_extra").textContent = rub(r.extra);
+  $("r_w").textContent = grams(r.weightEach);
+  $("r_batch").textContent = r.qty + " шт · " + rub(r.batch);
+  var t = r.total > 0 ? r.total : 1;
+  $("b_m").style.width = (r.mat/t*100) + "%";
+  $("b_t").style.width = (r.time/t*100) + "%";
+  $("b_x").style.width = (r.extra/t*100) + "%";
+  var w = settingsNum().waste;
+  $("rateHint").textContent = "Час работы принтера: " + rub(r.rate) + (w ? " · запас пластика " + fmt1.format(w) + "%" : "") + ". Меняется во вкладке «Профиль».";
+}
+function renderMaterialSelect(){
+  var sel = $("c_material"), cur = sel.value;
+  var html = '<option value="">Без материала, цена вручную</option>';
+  S.materials.forEach(function(m){ html += '<option value="'+esc(m.id)+'">'+esc(m.name)+' — '+esc(fmt2.format(num(m.price)))+' ₽/кг</option>'; });
+  sel.innerHTML = html;
+  if(cur && S.materials.some(function(m){ return m.id === cur; })) sel.value = cur;
+}
+$("c_material").addEventListener("change", function(){
+  var m = S.materials.filter(function(x){ return x.id === $("c_material").value; })[0];
+  if(m){ $("c_price").value = String(num(m.price)); $("exampleNote").hidden = true; }
+  renderCalc();
+});
+CALC_IDS.forEach(function(id){ $(id).addEventListener("input", function(){ $("exampleNote").hidden = true; renderCalc(); }); });
+
+$("s_save").addEventListener("click", function(){
+  var msg = $("s_msg"); msg.className = "msg";
+  var name = $("s_name").value.trim(), sku = $("s_sku").value.trim();
+  if(!name){ msg.textContent = "Впишите название модели"; $("s_name").focus(); return; }
+  if(!last || last.total <= 0){ msg.textContent = "Себестоимость равна нулю. Проверьте вес и время"; return; }
+  if(sku && S.parts.some(function(p){ return p.sku === sku; })){ msg.textContent = "Артикул " + sku + " уже есть в учёте"; $("s_sku").focus(); return; }
+  var m = S.materials.filter(function(x){ return x.id === $("c_material").value; })[0];
+  S.parts.unshift({ id:uid(), sku:sku, name:name, material:m ? m.name : "", weight:round(last.weightEach,1),
+                    cost:round(last.total,2), hours:round(last.hours/last.qty,2), created:new Date().toISOString() });
+  save("parts"); renderParts();
+  $("s_sku").value = ""; $("s_name").value = "";
+  msg.className = "msg ok"; msg.textContent = "Сохранено в учёт: " + name;
+});
+
+/* ---------- диалог-форма ---------- */
+var dlgSave = null, dlgFields = [];
+function openForm(o){
+  $("dlg_title").textContent = o.title; $("dlg_msg").textContent = "";
+  dlgFields = o.fields; dlgSave = o.onSave;
+  $("dlg_fields").innerHTML = o.fields.map(function(f){
+    var v = esc(o.values && o.values[f.key] != null ? o.values[f.key] : "");
+    var ctl = f.type === "area" ? '<textarea id="f_'+f.key+'">'+v+'</textarea>'
+            : '<input id="f_'+f.key+'" '+(f.type === "num" ? 'class="n" inputmode="decimal" ' : '')+'value="'+v+'" autocomplete="off">';
+    return '<label class="f'+(f.half ? '' : ' full')+'">'+esc(f.label)+(f.unit ? ' <span class="u">'+esc(f.unit)+'</span>' : '')+ctl+'</label>';
+  }).join("");
+  var d = $("dlg"); if(d.showModal) d.showModal(); else d.setAttribute("open","");
+}
+function closeForm(){ var d = $("dlg"); if(d.close) d.close(); else d.removeAttribute("open"); }
+$("dlg_cancel").addEventListener("click", closeForm);
+$("dlg_form").addEventListener("submit", function(e){
+  e.preventDefault();
+  var v = {};
+  for(var i=0;i<dlgFields.length;i++){
+    var f = dlgFields[i], raw = $("f_"+f.key).value.trim();
+    if(f.required && !raw){ $("dlg_msg").textContent = "Заполните поле «" + f.label + "»"; $("f_"+f.key).focus(); return; }
+    v[f.key] = f.type === "num" ? num(raw) : raw;
+  }
+  var err = dlgSave(v);
+  if(err){ $("dlg_msg").textContent = err; return; }
+  closeForm();
+});
+
+/* удаление в два нажатия вместо confirm() */
+function armDelete(btn, fn){
+  if(btn.dataset.armed){ fn(); return; }
+  btn.dataset.armed = "1"; var old = btn.textContent; btn.textContent = "Точно удалить?";
+  setTimeout(function(){ if(btn.isConnected){ delete btn.dataset.armed; btn.textContent = old; } }, 3000);
+}
+
+/* ---------- детали ---------- */
+var PART_FIELDS = [
+  {key:"sku",label:"Артикул",half:true},
+  {key:"material",label:"Материал",half:true},
+  {key:"name",label:"Название модели",required:true},
+  {key:"weight",label:"Вес 1 шт",unit:"г",type:"num",half:true},
+  {key:"cost",label:"Себестоимость",unit:"₽",type:"num",half:true},
+  {key:"comment",label:"Комментарий",type:"area"}
+];
+function renderParts(){
+  var box = $("p_list");
+  if(!loaded){ box.innerHTML = '<div class="empty">Загружаю список деталей…</div>'; $("p_totals").textContent = ""; return; }
+  var q = $("p_search").value.trim().toLowerCase();
+  var rows = S.parts.filter(function(p){ return !q || (p.sku||"").toLowerCase().indexOf(q) >= 0 || (p.name||"").toLowerCase().indexOf(q) >= 0; });
+  $("p_totals").textContent = S.parts.length ? (q ? "Найдено " + rows.length + " из " + S.parts.length : "Всего деталей: " + S.parts.length) : "";
+  if(!S.parts.length){ box.innerHTML = '<div class="empty">Здесь появятся ваши детали: артикул, название модели, себестоимость и вес 1 шт. Посчитайте деталь во вкладке «Расчёт» и нажмите «Сохранить деталь» или добавьте её вручную.</div>'; return; }
+  if(!rows.length){ box.innerHTML = '<div class="empty">По запросу ничего не найдено.</div>'; return; }
+  box.innerHTML = '<div class="item part head"><div>Артикул</div><div>Название модели</div><div>Материал</div><div class="num">Вес 1 шт</div><div class="num">Себестоимость</div><div></div></div>' +
+    rows.map(function(p){
+      return '<div class="item part" data-id="'+esc(p.id)+'">'+
+        '<div class="sku">'+(esc(p.sku) || "—")+'</div>'+
+        '<div class="nm">'+esc(p.name)+(p.comment ? '<small>'+esc(p.comment)+'</small>' : '')+'</div>'+
+        '<div class="mat">'+(esc(p.material) || "—")+'</div>'+
+        '<div class="num w">'+grams(num(p.weight))+'</div>'+
+        '<div class="num cost">'+rub(num(p.cost))+'</div>'+
+        '<div class="acts"><button class="btn small" data-act="edit" type="button">Изменить</button><button class="btn small danger" data-act="del" type="button">Удалить</button></div>'+
+      '</div>';
+    }).join("");
+}
+function editPart(p){
+  openForm({ title:p ? "Изменить деталь" : "Новая деталь", fields:PART_FIELDS, values:p || {},
+    onSave:function(v){
+      if(v.sku && S.parts.some(function(x){ return x.sku === v.sku && (!p || x.id !== p.id); })) return "Артикул " + v.sku + " уже есть в учёте";
+      v.weight = round(v.weight,1); v.cost = round(v.cost,2);
+      if(p) S.parts = S.parts.map(function(x){ return x.id === p.id ? Object.assign({}, x, v) : x; });
+      else S.parts.unshift(Object.assign({ id:uid(), created:new Date().toISOString() }, v));
+      save("parts"); renderParts();
+    }});
+}
+$("p_add").addEventListener("click", function(){ editPart(null); });
+$("p_search").addEventListener("input", renderParts);
+$("p_list").addEventListener("click", function(e){
+  var b = e.target.closest("button[data-act]"); if(!b) return;
+  var id = b.closest("[data-id]").dataset.id, p = S.parts.filter(function(x){ return x.id === id; })[0]; if(!p) return;
+  if(b.dataset.act === "edit") editPart(p);
+  else armDelete(b, function(){ S.parts = S.parts.filter(function(x){ return x.id !== id; }); save("parts"); renderParts(); });
+});
+
+/* ---------- материалы и настройки ---------- */
+var MAT_FIELDS = [{key:"name",label:"Тип пластика",required:true,half:true},{key:"price",label:"Цена",unit:"₽ за 1 кг",type:"num",required:true,half:true}];
+var STARTER = [["PLA",1500],["PETG",1400],["ABS",1300],["TPU",2200]];
+function renderMaterials(){
+  var box = $("m_list");
+  if(!loaded){ box.innerHTML = '<div class="empty">Загружаю материалы…</div>'; }
+  else if(!S.materials.length){
+    box.innerHTML = '<div class="empty">Пока нет материалов. Добавьте свой пластик с ценой за килограмм, и он появится в расчёте.<button class="btn" id="m_starter" type="button">Добавить типовые: PLA, PETG, ABS, TPU</button><span class="hint">Цены в типовом наборе примерные, поправьте под свои закупки.</span></div>';
+  } else {
+    box.innerHTML = S.materials.map(function(m){
+      return '<div class="item mrow" data-id="'+esc(m.id)+'"><div class="nm">'+esc(m.name)+'</div><div class="num">'+esc(fmt2.format(num(m.price)))+' ₽/кг</div>'+
+        '<div class="acts"><button class="btn small" data-act="edit" type="button">Изменить</button><button class="btn small danger" data-act="del" type="button">Удалить</button></div></div>';
+    }).join("");
+  }
+  renderMaterialSelect();
+}
+function editMaterial(m){
+  openForm({ title:m ? "Изменить материал" : "Новый материал", fields:MAT_FIELDS, values:m || {},
+    onSave:function(v){
+      if(v.price <= 0) return "Цена за килограмм должна быть больше нуля";
+      if(m) S.materials = S.materials.map(function(x){ return x.id === m.id ? Object.assign({}, x, v) : x; });
+      else S.materials.push(Object.assign({ id:uid() }, v));
+      save("materials"); renderMaterials();
+    }});
+}
+$("m_add").addEventListener("click", function(){ editMaterial(null); });
+$("m_list").addEventListener("click", function(e){
+  if(e.target.id === "m_starter"){
+    S.materials = STARTER.map(function(s){ return { id:uid(), name:s[0], price:s[1] }; });
+    save("materials"); renderMaterials(); return;
+  }
+  var b = e.target.closest("button[data-act]"); if(!b) return;
+  var id = b.closest("[data-id]").dataset.id, m = S.materials.filter(function(x){ return x.id === id; })[0]; if(!m) return;
+  if(b.dataset.act === "edit") editMaterial(m);
+  else armDelete(b, function(){ S.materials = S.materials.filter(function(x){ return x.id !== id; }); save("materials"); renderMaterials(); });
+});
+var ST = { st_power:"power", st_tariff:"tariff", st_amort:"amort", st_waste:"waste" };
+function renderSettings(){
+  Object.keys(ST).forEach(function(id){ if(document.activeElement !== $(id)) $(id).value = String(num(S.settings[ST[id]])); });
+  $("st_rate").textContent = "Сейчас час работы принтера стоит " + rub(hourRate()) + ".";
+}
+Object.keys(ST).forEach(function(id){
+  $(id).addEventListener("input", function(){
+    S.settings[ST[id]] = Math.max(0, num($(id).value));
+    $("st_rate").textContent = "Сейчас час работы принтера стоит " + rub(hourRate()) + ".";
+    save("settings"); renderCalc();
+  });
+});
+
+/* ---------- заметки ---------- */
+var dateFmt = new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"});
+function renderNotes(){
+  var box = $("n_list");
+  if(!loaded){ box.innerHTML = '<div class="empty">Загружаю заметки…</div>'; return; }
+  if(!S.notes.length){ box.innerHTML = '<div class="empty">Заметок пока нет. Сюда удобно записывать настройки печати, поставщиков и идеи.</div>'; return; }
+  box.innerHTML = S.notes.map(function(n){
+    var d = new Date(n.updated);
+    return '<div class="item note" data-id="'+esc(n.id)+'"><div><p>'+esc(n.text)+'</p><time>'+(isNaN(d) ? "" : esc(dateFmt.format(d)))+'</time></div>'+
+      '<div class="acts"><button class="btn small" data-act="edit" type="button">Изменить</button><button class="btn small danger" data-act="del" type="button">Удалить</button></div></div>';
+  }).join("");
+}
+$("n_add").addEventListener("click", function(){
+  var t = $("n_text").value.trim(); if(!t){ $("n_text").focus(); return; }
+  S.notes.unshift({ id:uid(), text:t, updated:new Date().toISOString() });
+  $("n_text").value = ""; save("notes"); renderNotes();
+});
+$("n_list").addEventListener("click", function(e){
+  var b = e.target.closest("button[data-act]"); if(!b) return;
+  var id = b.closest("[data-id]").dataset.id, n = S.notes.filter(function(x){ return x.id === id; })[0]; if(!n) return;
+  if(b.dataset.act === "edit") openForm({ title:"Изменить заметку", fields:[{key:"text",label:"Текст заметки",type:"area",required:true}], values:n,
+    onSave:function(v){ S.notes = S.notes.map(function(x){ return x.id === id ? Object.assign({}, x, { text:v.text, updated:new Date().toISOString() }) : x; }); save("notes"); renderNotes(); }});
+  else armDelete(b, function(){ S.notes = S.notes.filter(function(x){ return x.id !== id; }); save("notes"); renderNotes(); });
+});
+
+/* ---------- экспорт и резервная копия ---------- */
+function download(name, text, type){
+  var cap = window.Capacitor;
+  if(cap && cap.isNativePlatform && cap.isNativePlatform()){
+    /* в Android-приложении файл отдаётся через системное меню «Поделиться / Сохранить» */
+    cap.Plugins.Filesystem.writeFile({ path:name, data:text, directory:"CACHE", encoding:"utf8" })
+      .then(function(r){ return cap.Plugins.Share.share({ title:name, url:r.uri }); })
+      .catch(function(e){ if(!/cancel/i.test(String(e && e.message))) alert("Не удалось сохранить файл: " + (e && e.message || e)); });
+    return;
+  }
+  var a = document.createElement("a"), url = URL.createObjectURL(new Blob([text], {type:type}));
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
+function stamp(){ return new Date().toISOString().slice(0,10); }
+function csvCell(v){ v = String(v == null ? "" : v); if(/^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g,'""') + '"'; }
+function csvNum(n){ return String(num(n)).replace(".", ","); }
+$("p_csv").addEventListener("click", function(){
+  var rows = [["Артикул","Название модели","Материал","Вес 1 шт, г","Себестоимость, ₽","Комментарий"].map(csvCell).join(";")];
+  S.parts.forEach(function(p){
+    rows.push([csvCell(p.sku), csvCell(p.name), csvCell(p.material), csvNum(p.weight), csvNum(p.cost), csvCell(p.comment)].join(";"));
+  });
+  download("detali-" + stamp() + ".csv", "\ufeff" + rows.join("\r\n"), "text/csv;charset=utf-8");
+});
+$("bk_export").addEventListener("click", function(){
+  var data = { app:"print-cost", version:1, exported:new Date().toISOString(),
+               settings:S.settings, materials:S.materials, parts:S.parts, notes:S.notes };
+  download("print-cost-" + stamp() + ".json", JSON.stringify(data, null, 2), "application/json");
+});
+$("bk_import").addEventListener("click", function(){ $("bk_file").value = ""; $("bk_file").click(); });
+$("bk_file").addEventListener("change", function(){
+  var f = $("bk_file").files[0], msg = $("bk_msg"); if(!f) return;
+  var rd = new FileReader();
+  rd.onerror = function(){ msg.className = "msg"; msg.textContent = "Не удалось прочитать файл."; };
+  rd.onload = function(){
+    var d; try{ d = JSON.parse(rd.result); }catch(e){ d = null; }
+    if(!d || d.app !== "print-cost" || !Array.isArray(d.parts) || !Array.isArray(d.materials) || !Array.isArray(d.notes)){
+      msg.className = "msg"; msg.textContent = "Это не файл резервной копии приложения."; return;
+    }
+    if(!confirm("Заменить все данные на этом устройстве данными из файла?\nДеталей: " + d.parts.length + ", материалов: " + d.materials.length + ", заметок: " + d.notes.length)) return;
+    apply("settings", d.settings); S.materials = d.materials; S.parts = d.parts; S.notes = d.notes;
+    KEYS.forEach(save); renderAll();
+    if(!saveErr){ msg.className = "msg ok"; msg.textContent = "Данные восстановлены из файла."; }
+  };
+  rd.readAsText(f);
+});
+
+/* ---------- запуск ---------- */
+function renderAll(){ renderMaterials(); renderSettings(); renderParts(); renderNotes(); renderCalc(); }
+var startTab = (location.hash || "").slice(1);
+if(TABS.indexOf(startTab) < 0){ try{ startTab = localStorage.getItem(LS+"tab") || "calc"; }catch(e){ startTab = "calc"; } }
+showTab(startTab);
+start();
+if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(function(){});
+})();
+</script>
+
+</body></html>

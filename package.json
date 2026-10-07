@@ -1,0 +1,35 @@
+{
+  "name": "print-cost",
+  "version": "1.0.0",
+  "description": "Калькулятор себестоимости 3D-печати и учёт деталей",
+  "author": "print-cost",
+  "private": true,
+  "main": "desktop/main.js",
+  "scripts": {
+    "desktop": "electron .",
+    "build:win": "electron-builder --win --x64",
+    "build:android": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/filesystem": "^7.0.0",
+    "@capacitor/share": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "ru.printcost.app",
+    "productName": "Себестоимость 3D-печати",
+    "files": ["www/**/*", "desktop/**/*", "package.json"],
+    "directories": { "output": "dist-win" },
+    "win": {
+      "target": ["portable"],
+      "icon": "www/icons/icon-512.png"
+    },
+    "portable": { "artifactName": "PrintCost-portable-${version}.exe" }
+  }
+}

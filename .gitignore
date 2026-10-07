@@ -1,0 +1,11 @@
+# готовые файлы идут в релизы GitHub, а не в репозиторий
+dist/
+dist-win/
+node_modules/
+android/
+.claude/
+# ключи подписи и секреты
+*.jks
+*.keystore
+password.txt
+.env
